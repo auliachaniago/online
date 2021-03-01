@@ -1,0 +1,14 @@
+---
+- hosts: webserver
+  become: true
+  vars:
+    webdir: /testing
+
+  tasks:    
+    - name : Create a web directory
+      file:
+        state: directory
+        dest: "{{ webdir }}"
+        owner: ansible
+        group: ansible
+        mode: u=rwx,g=rx,o=rx

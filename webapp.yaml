@@ -1,0 +1,78 @@
+---
+- hosts: webserver
+  become: yes
+  vars:
+    webdir: /webserver
+    web_linked: /var/www/html/
+    pkgs: httpd, firewalld, mod_ssl
+    jinja2_temp: index.html.j2
+    services:
+      - httpd
+      - firewalld
+  tasks:
+    - name: Install all packages needed
+      yum :
+        name: "{{ pkgs }}"
+        state: latest
+
+    - name: Enable and start the all service needed
+      service:
+        name: "{{ item }}"
+        state: started 
+        enabled: yes
+      loop: "{{ services }}"
+
+    - name: Allow all port needed for services to communicate
+      firewalld:
+        port: "{{ item }}"
+        immediate: true
+        permanent: true
+        state: enabled
+      loop:
+        - 80/tcp
+        - 443/tcp
+
+    - name : Create a web directory
+      file:
+        state: directory
+        dest: "{{ webdir }}"
+        owner: apache
+        group: apache
+        mode: u=rwx,g=rx,o=rx
+
+    - name: Install jinja2 template for a web content
+      template:
+        src: "{{ jinja2_temp }}"
+        dest: "{{ webdir }}/index.html"
+        owner: apache
+        group: apache
+        mode: u=rwx,g=rx,o=rx
+
+    - name : Create symbolically linked from {{ webdir }} to {{ web_linked }}
+      file:
+        src: "{{ webdir }}"
+        dest: "{{ web_linked }}"
+        state: link
+
+    - name: Set a selinux permission to {{ webdir }} and {{ web_linked }}
+      sefcontext:
+        target: "{{ item }}"
+        setype: httpd_sys_content_t
+        state: present
+      with_items:
+        - "{{ web_linked }}(/.*)?"
+        - "{{ webdir }}(/.*)?"
+
+    - name: Re-write the selinux permission to {{ webdir }} and {{ web_linked }} 
+      command: "{{ item }}"
+      loop:
+        - "restorecon -vvRF {{ webdir }}"
+        - "restorecon -vvRF {{ web_linked }}"
+      notify: restart httpd
+
+  handlers:
+    - name: restart httpd
+      service:
+        name: httpd
+        state: restarted
+...
